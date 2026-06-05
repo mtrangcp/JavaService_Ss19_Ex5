@@ -1,6 +1,7 @@
 package com.btvn.ss19ex5.controller;
 
 import com.btvn.ss19ex5.model.entity.RefreshToken;
+import com.btvn.ss19ex5.model.entity.User;
 import com.btvn.ss19ex5.repository.RefreshTokenRepository;
 import com.btvn.ss19ex5.service.RefreshTokenService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,23 +24,26 @@ public class AuthController {
 
     @PostMapping("/refresh")
     public ResponseEntity<?> refreshAccessToken(@RequestParam String requestRefreshToken) {
-        return refreshTokenRepository.findByToken(requestRefreshToken)
-                .map(refreshTokenService::verifyExpiration)
-                .map(RefreshToken::getUser)
-                .map(user -> {
-                    String newAccessToken = "GIA_LAP_NEW_ACCESS_TOKEN_CHO_" + user.getUsername();
+        var tokenOpt = refreshTokenRepository.findByToken(requestRefreshToken);
+        if (tokenOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Refresh Token không tồn tại trong hệ thống!");
+        }
 
-                    Map<String, String> data = new HashMap<>();
-                    data.put("accessToken", newAccessToken);
-                    data.put("refreshToken", requestRefreshToken);
-                    return ResponseEntity.ok((Object) data);
-                })
-                .orElseGet(() -> {
-                    Map<String, String> errorResponse = new HashMap<>();
-                    errorResponse.put("error", "Forbidden");
-                    errorResponse.put("message", "Refresh Token không tồn tại trong hệ thống!");
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
-                });
+        try {
+            RefreshToken refreshToken = refreshTokenService.verifyExpiration(tokenOpt.get());
+            User user = refreshToken.getUser();
+
+            String newAccessToken = "GIA_LAP_NEW_ACCESS_TOKEN_CHO_" + user.getUsername();
+            Map<String, String> data = new HashMap<>();
+            data.put("accessToken", newAccessToken);
+            data.put("refreshToken", requestRefreshToken);
+
+            return ResponseEntity.ok(data);
+
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+        }
     }
 
 
